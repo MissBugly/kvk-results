@@ -70,7 +70,7 @@ select{font-weight:600}
 button{cursor:pointer}
 button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.tops{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.tops{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
 @media (max-width:700px){.tops{grid-template-columns:1fr}}
 .toplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .toplist li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;font-size:13px}
@@ -129,6 +129,7 @@ button[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-colo
   <div class="tops">
     <div class="panel"><h3>Top attackers · kills</h3><ol class="toplist" id="topAtt"></ol></div>
     <div class="panel"><h3>Top defenders · reinforcements reached</h3><ol class="toplist" id="topDef"></ol></div>
+    <div class="panel"><h3>Top objective holders · formation-minutes</h3><ol class="toplist" id="topHold"></ol></div>
   </div>
   <div class="panel">
     <div class="controls" style="justify-content:space-between">
@@ -162,7 +163,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const tip=document.getElementById('tip');
 function bindTip(el,html){el.addEventListener('mousemove',e=>{tip.innerHTML=html;tip.hidden=false;const x=Math.min(e.clientX+12,innerWidth-tip.offsetWidth-8);tip.style.left=x+'px';tip.style.top=(e.clientY+14)+'px'});el.addEventListener('mouseleave',()=>tip.hidden=true)}
 function counts(rows){const c={att:0,both:0,def:0,hold:0,move:0,idle:0};rows.forEach(r=>c[r[2]]++);return c}
-function agg(rows){const c=counts(rows);return{n:rows.length,c,att:c.att+c.both,def:c.def+c.both,k:rows.reduce((s,r)=>s+r[5],0),ml:rows.reduce((s,r)=>s+r[6],0),mg:rows.reduce((s,r)=>s+r[7],0),ob:rows.reduce((s,r)=>s+r[10],0),rf:rows.reduce((s,r)=>s+r[4],0),am:rows.reduce((s,r)=>s+r[3],0)}}
+function agg(rows){const c=counts(rows);return{n:rows.length,c,att:c.att+c.both,def:c.def+c.both,k:rows.reduce((s,r)=>s+r[5],0),ml:rows.reduce((s,r)=>s+r[6],0),mg:rows.reduce((s,r)=>s+r[7],0),ob:rows.reduce((s,r)=>s+r[10],0),rf:rows.reduce((s,r)=>s+r[4],0),am:rows.reduce((s,r)=>s+r[3],0),obN:rows.filter(r=>r[10]>0).length}}
 function stack(el,c,n,label){el.innerHTML='';ROLES.forEach(([k,lab,v])=>{if(!c[k])return;const s=document.createElement('span');s.style.width=(c[k]/n*100)+'%';s.style.background=`var(${v})`;el.appendChild(s);bindTip(s,`<b>${esc(lab)}</b><br>${nf.format(c[k])} players · ${f1(c[k]/n*100)}%`)});el.setAttribute('aria-label',label+': '+ROLES.map(r=>r[1]+' '+c[r[0]]).join(', '))}
 function kpis(el,a,extra){const eff=a.ml?Math.round(a.k/a.ml):0;el.innerHTML=[
  ["Players recorded",nf.format(a.n),"with at least one march"],
@@ -174,7 +175,7 @@ function kpis(el,a,extra){const eff=a.ml?Math.round(a.k/a.ml):0;el.innerHTML=[
 
 // ----- server -----
 const S=agg(D);
-kpis(document.getElementById('srvKpis'),S,[['Present, no action',nf.format(S.c.idle),f1(S.c.idle/S.n*100)+'% · march seen, never arrived']]);
+kpis(document.getElementById('srvKpis'),S,[["Objective holding",f1(S.ob)+" min",S.obN+" players held objectives"],['Present, no action',nf.format(S.c.idle),f1(S.c.idle/S.n*100)+'% · march seen, never arrived']]);
 stack(document.getElementById('srvStack'),S.c,S.n,'Roles on the server');
 document.getElementById('srvRoles').innerHTML=ROLES.map(([k,lab,v,d])=>`<div class="rolecard" style="border-color:var(${v})"><div class="n">${nf.format(S.c[k])} <span class="muted" style="font-size:14px;font-weight:500">${f1(S.c[k]/S.n*100)}%</span></div><div><b>${lab}</b></div><div class="d">${d}</div></div>`).join('');
 const ob=document.getElementById('objBars');
@@ -202,9 +203,9 @@ const sel=document.getElementById('allySel');
 sel.value='EOS';
 let roleF='all',plSort={k:5,dir:-1};
 const fb=document.getElementById('roleFilter');
-[["all","All"],...ROLES.map(r=>[r[0],r[1]])].forEach(([k,l])=>{const b=document.createElement('button');b.type='button';b.dataset.k=k;b.textContent=l;b.setAttribute('aria-pressed',k===roleF);b.addEventListener('click',()=>{roleF=k;fb.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.k===k));renderPl()});fb.appendChild(b)});
+[["all","All"],...ROLES.map(r=>[r[0],r[1]]),["obj","Held objectives"]].forEach(([k,l])=>{const b=document.createElement('button');b.type='button';b.dataset.k=k;b.textContent=l;b.setAttribute('aria-pressed',k===roleF);b.addEventListener('click',()=>{roleF=k;if(k==='obj')plSort={k:10,dir:-1};fb.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.k===k));renderPl()});fb.appendChild(b)});
 const PCOLS=[[0,"Player","l"],[2,"Role","l"],[3,"Attacks reached"],[11,"Unique targets"],[4,"Reinforcements reached"],[10,"Objective holding (min)"],[5,"Kills"],[6,"Might lost (M)"],[8,"Active minutes"]];
-function renderPl(){const rows=AL[sel.value].filter(r=>roleF==='all'||r[2]===roleF);const ord=ROLES.map(r=>r[0]);
+function renderPl(){const rows=AL[sel.value].filter(r=>roleF==='all'?true:(roleF==='obj'?r[10]>0:r[2]===roleF));const ord=ROLES.map(r=>r[0]);
  rows.sort((p,q)=>{let a=p[plSort.k],b=q[plSort.k];if(plSort.k===2){a=ord.indexOf(a);b=ord.indexOf(b)}return (typeof a==='string'?a.localeCompare(b):a-b)*plSort.dir});
  const t=document.getElementById('plTable');
  t.innerHTML=`<thead><tr>${PCOLS.map(([k,l,c])=>`<th class="${c||''}" data-k="${k}" tabindex="0" ${plSort.k===k?`aria-sort="${plSort.dir<0?'descending':'ascending'}"`:''}>${l}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>{const R=RK[r[2]];return `<tr><td>${esc(r[0])}</td><td class="l"><span class="chip"><i style="background:var(${R[2]})"></i>${R[1]}</span></td><td>${r[3]}</td><td>${r[11]}</td><td>${r[4]}</td><td>${f1(r[10])}</td><td>${nf.format(r[5])}</td><td>${f1(r[6])}</td><td>${f1(r[8])}</td></tr>`}).join(''):`<tr><td colspan="9" class="l muted">No players in this category.</td></tr>`}</tbody>`;
@@ -212,11 +213,12 @@ function renderPl(){const rows=AL[sel.value].filter(r=>roleF==='all'||r[2]===rol
 function topList(el,rows,idx,color,fmt){const t=rows.filter(r=>r[idx]>0).sort((a,b)=>b[idx]-a[idx]).slice(0,8);const mx=t.length?t[0][idx]:1;
  el.innerHTML=t.length?t.map((r,i)=>`<li><span class="rk">${i+1}</span><div><div>${esc(r[0])}</div><div class="bar"><span style="width:${r[idx]/mx*100}%;background:var(${color})"></span></div></div><span class="v">${fmt(r[idx])}</span></li>`).join(''):'<li class="muted">No recorded data.</li>'}
 function renderAl(){const rows=AL[sel.value];const a=agg(rows);
- kpis(document.getElementById('alKpis'),a,[["Objective holding",f1(a.ob)+" min","sum across formations"]]);
+ kpis(document.getElementById('alKpis'),a,[["Objective holding",f1(a.ob)+" min",a.obN+" players held objectives"]]);
  stack(document.getElementById('alStack'),a.c,a.n,'Roles in '+sel.value);
  document.getElementById('alLegend').innerHTML=ROLES.map(([k,l,v])=>`<span><i style="background:var(${v})"></i>${l}<b>${a.c[k]}</b></span>`).join('');
  topList(document.getElementById('topAtt'),rows,5,'--r-att',v=>big(v));
  topList(document.getElementById('topDef'),rows,4,'--r-def',v=>nf.format(v));
+ topList(document.getElementById('topHold'),rows,10,'--r-hold',v=>f1(v)+' min');
  renderPl()}
 sel.addEventListener('change',renderAl);
 renderAl();
